@@ -1,0 +1,8 @@
+_pycache_
+.venv
+.pt
+dataset
+venv_fresh
+dataset2
+*.zip
+runs
