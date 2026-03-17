@@ -1,7 +1,0 @@
-path: c:/Fruit-Ninja/dataset
-train: images/train
-val: images/val
-
-names:
-  0: Fruit
-  1: Bomb
