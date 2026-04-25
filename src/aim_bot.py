@@ -50,10 +50,11 @@ def win32_swipe(x1: int, y1: int, x2: int, y2: int,
     x1,y1,x2,y2 are desktop-absolute pixel coordinates.
     Must be called from main thread.
     """
-    _SetCursorPos(x1, y1)
+    logging.info(f"Swiping from ({int(x1)}, {int(y1)}) to ({int(x2)}, {int(y2)})")
+    _SetCursorPos(int(x1), int(y1))
     time.sleep(0.008)
     _mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-    time.sleep(0.005)
+    time.sleep(0.01) # Wait slightly so game registers the press before we start dragging
 
     delay = duration / steps
     for i in range(1, steps + 1):
@@ -63,6 +64,7 @@ def win32_swipe(x1: int, y1: int, x2: int, y2: int,
         _SetCursorPos(ix, iy)
         time.sleep(delay)
 
+    time.sleep(0.01) # Wait slightly so game registers final position before release
     _mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
 
 
@@ -429,6 +431,11 @@ class FruitNinjaBot:
 
         try:
             while True:
+                # ── GLOBAL KILL SWITCH ──
+                if ctypes.windll.user32.GetAsyncKeyState(0x1B) & 0x8000:
+                    logging.info("\n[KILL SWITCH] ESC pressed! Stopping bot immediately.")
+                    break
+
                 frame = self.capture.read()
                 if frame is None:
                     time.sleep(0.005)
@@ -472,16 +479,17 @@ class FruitNinjaBot:
 #  ENTRY POINT
 # ══════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Fruit Ninja Aim Bot (v1 Legacy)")
+    parser.add_argument('--no-debug', action='store_true', help='Hide the OpenCV debug window')
+    args = parser.parse_args()
 
     # 1. Your model paths
     CFG.MODEL_PATH = r"C:\Fruit-Ninja\best.pt"
     CFG.ONNX_PATH  = r"C:\Fruit-Ninja\best.onnx"
 
     # 2. Your exact class names from data.yaml
-    CFG.FRUIT_CLASSES = [
-        "apple", "watermelon", "orange", "banana",
-        "kiwi", "pineapple", "mango", "peach",
-    ]
+    CFG.FRUIT_CLASSES = ["fruit"]
     CFG.BOMB_CLASS = "bomb"
 
     # 3. Window coords confirmed — do not change unless BlueStacks moves
@@ -490,11 +498,15 @@ if __name__ == "__main__":
     # 4. Tune these if needed
     CFG.IMGSZ            = 320
     CFG.SKIP_FRAMES      = 2
-    CFG.CONF_THRESH      = 0.50
-    CFG.SLICE_DURATION   = 0.035
-    CFG.SLICE_STEPS      = 12
-    CFG.BOMB_SAFE_MARGIN = 55
-    CFG.GROUP_DISTANCE   = 100
+    CFG.CONF_THRESH      = 0.35
+    CFG.SLICE_DURATION   = 0.05
+    CFG.SLICE_STEPS      = 15
+    CFG.SLICE_PADDING    = 50
+    CFG.BOMB_SAFE_MARGIN = 60
+    CFG.GROUP_DISTANCE   = 120
+    
+    if args.no_debug:
+        CFG.SHOW_DEBUG = False
 
     bot = FruitNinjaBot(CFG)
     bot.run()

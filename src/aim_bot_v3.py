@@ -211,8 +211,8 @@ def plan_all(detections, cfg, ox, oy, win_w, win_h):
     swipes = []
     for g in groups:
         if len(g) == 1:
-            x1 = max(0, g[0].x1 - cfg.SLICE_PADDING)
-            x2 = min(win_w, g[0].x2 + cfg.SLICE_PADDING)
+            x1 = max(0, g[0].cx - cfg.SLICE_PADDING)
+            x2 = min(win_w, g[0].cx + cfg.SLICE_PADDING)
             y1 = y2 = g[0].cy
         else:
             x1, y1 = g[0].cx, g[0].cy
@@ -221,6 +221,44 @@ def plan_all(detections, cfg, ox, oy, win_w, win_h):
         # Convert to screen
         swipes.append((x1 + ox, y1 + oy, x2 + ox, y2 + oy))
     return swipes
+
+class FruitTracker:
+    def __init__(self):
+        self.history = []
+        self.last_time = time.time()
+        self.predict_ahead = 0.15 # Predict 0.15s into the future
+        
+    def update(self, fruits):
+        curr_time = time.time()
+        dt = curr_time - self.last_time
+        self.last_time = curr_time
+        
+        new_history = []
+        for f in fruits:
+            orig_cx, orig_cy = f.cx, f.cy
+            
+            # Only track if dt makes sense (prevent huge jumps if lag spikes)
+            if 0.001 < dt < 0.2:
+                best_dist = 150 
+                best_prev = None
+                for h in self.history:
+                    dist = ((orig_cx - h['cx'])**2 + (orig_cy - h['cy'])**2)**0.5
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_prev = h
+                        
+                if best_prev:
+                    # Calculate velocity (pixels per second)
+                    vx = (orig_cx - best_prev['cx']) / dt
+                    vy = (orig_cy - best_prev['cy']) / dt
+                    
+                    # Offset the center coordinate forward in time
+                    f.cx = int(orig_cx + vx * self.predict_ahead)
+                    f.cy = int(orig_cy + vy * self.predict_ahead)
+                    
+            new_history.append({'cx': orig_cx, 'cy': orig_cy})
+            
+        self.history = new_history
 
 class DetObj:
     __slots__ = ('x1','y1','x2','y2','cx','cy','cls','conf')
@@ -267,6 +305,7 @@ class FruitNinjaBot:
         self.dets = []
         self.swipes = []
         self.fn = 0
+        self.tracker = FruitTracker()
 
     def run(self):
         logging.info("Bot starting...")
@@ -303,6 +342,10 @@ class FruitNinjaBot:
                         res.names[int(box.cls[0])], float(box.conf[0])
                     ))
                 
+                # Apply predictive physics tracking to fruits!
+                fruits_only = [d for d in self.dets if d.cls in self.cfg.FRUIT_CLASSES]
+                self.tracker.update(fruits_only)
+                
                 self.swipes = plan_all(self.dets, self.cfg, self.ox, self.oy, self.w, self.h)
                 
                 for s in self.swipes:
@@ -322,7 +365,7 @@ class FruitNinjaBot:
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Fruit Ninja Aim Bot")
+    parser = argparse.ArgumentParser(description="Fruit Ninja Aim Bot (Predictive)")
     parser.add_argument('--no-debug', action='store_true', help='Hide the OpenCV debug window for better performance')
     args = parser.parse_args()
     
