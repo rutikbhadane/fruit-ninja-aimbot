@@ -5,7 +5,7 @@
 ╠══════════════════════════════════════════════════════════════════╣
 ║  INPUT:  PyAutoGUI (Slower but extremely reliable)               ║
 ║  CAPTURE: MSS (Solid fallback for DXCam issues)                  ║
-║  WINDOW: Auto-detected BlueStacks App Player                     ║
+║  WINDOW: Auto-detected Fruit Ninja (Google Play Games on PC)     ║
 ╚══════════════════════════════════════════════════════════════════╝
 """
 
@@ -36,15 +36,48 @@ except Exception:
 
 user32 = ctypes.windll.user32
 
-def get_window_info(window_name="BlueStacks App Player"):
-    hwnd = user32.FindWindowW(None, window_name)
+_FRUIT_NINJA_TITLES = [
+    "Fruit Ninja®",
+    "Fruit Ninja",
+    "Fruit Ninja Classic",
+    "Fruit Ninja Classic®",
+    "FruitNinja",
+]
+
+def _find_fruit_ninja_window():
+    """Enumerate visible windows; return HWND matching 'fruit ninja' substring."""
+    found = ctypes.c_void_p(0)
+    EnumProc = ctypes.WINFUNCTYPE(
+        ctypes.c_bool,
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int)
+    )
+    def _cb(hwnd, lp):
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        buf = ctypes.create_unicode_buffer(256)
+        user32.GetWindowTextW(hwnd, buf, 256)
+        if "fruit ninja" in buf.value.strip().lower() or "fruitninja" in buf.value.strip().lower():
+            found.value = hwnd
+            return False
+        return True
+    user32.EnumWindows(EnumProc(_cb), 0)
+    return found.value
+
+def get_window_info():
+    """Locate the Fruit Ninja window and return its geometry dict."""
+    hwnd = 0
+    for title in _FRUIT_NINJA_TITLES:
+        hwnd = user32.FindWindowW(None, title)
+        if hwnd:
+            break
+    if not hwnd:
+        hwnd = _find_fruit_ninja_window()
     if not hwnd:
         return None
-    
     rect = ctypes.wintypes.RECT()
     user32.GetClientRect(hwnd, ctypes.byref(rect))
     w, h = rect.right, rect.bottom
-    
     pt = ctypes.wintypes.POINT(0, 0)
     user32.ClientToScreen(hwnd, ctypes.byref(pt))
     return {"hwnd": hwnd, "x": pt.x, "y": pt.y, "w": w, "h": h}
@@ -101,7 +134,7 @@ def run_bot():
     
     info = get_window_info()
     if not info:
-        logging.error("Could not find BlueStacks App Player")
+        logging.error("Could not find Fruit Ninja window! Launch Fruit Ninja first.")
         return
 
     logging.info(f"Window detected at ({info['x']}, {info['y']}) size {info['w']}x{info['h']}")

@@ -2,8 +2,48 @@ import ctypes
 import ctypes.wintypes
 import time
 
-user32   = ctypes.windll.user32
-HWND_BS  = 1050746  # your confirmed hwnd
+user32 = ctypes.windll.user32
+
+# ── Find Fruit Ninja window (auto-detected) ───────────────────────
+_FRUIT_NINJA_TITLES = [
+    "Fruit Ninja®",
+    "Fruit Ninja",
+    "Fruit Ninja Classic",
+    "Fruit Ninja Classic®",
+    "FruitNinja",
+]
+
+def _find_window():
+    for title in _FRUIT_NINJA_TITLES:
+        hwnd = user32.FindWindowW(None, title)
+        if hwnd:
+            return hwnd
+    found = ctypes.c_void_p(0)
+    EnumProc = ctypes.WINFUNCTYPE(
+        ctypes.c_bool,
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int)
+    )
+    def _cb(hwnd, lp):
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        buf = ctypes.create_unicode_buffer(256)
+        user32.GetWindowTextW(hwnd, buf, 256)
+        t = buf.value.strip().lower()
+        if "fruit ninja" in t or "fruitninja" in t:
+            found.value = hwnd
+            return False
+        return True
+    user32.EnumWindows(EnumProc(_cb), 0)
+    return found.value
+
+HWND_BS = _find_window()
+if not HWND_BS:
+    raise RuntimeError("Fruit Ninja window not found. Launch the game first!")
+
+_title_buf = ctypes.create_unicode_buffer(256)
+user32.GetWindowTextW(HWND_BS, _title_buf, 256)
+print(f"Found window: '{_title_buf.value.strip()}'")
 
 # ── Get client info ──────────────────────────────────────────────
 rect = ctypes.wintypes.RECT()
@@ -107,7 +147,7 @@ X2 = sx + 75
 Y  = sy
 
 print("\n--- TEST A: SetCursorPos + mouse_event ---")
-print("Watch BlueStacks for a slash. Starting in 3s...")
+print("Watch the game for a slash. Starting in 3s...")
 time.sleep(3)
 method_A_swipe(X1, Y, X2, Y)
 print("Done. Slash? (remember A)")

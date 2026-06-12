@@ -4,7 +4,7 @@
 ║              Optimized for i3 CPU + 8GB RAM                     ║
 ╠══════════════════════════════════════════════════════════════════╣
 ║  INPUT:  SetCursorPos + mouse_event (main thread only)          ║
-║  WINDOW: BlueStacks 5 — 664x407 at desktop origin (68, 23)      ║
+║  WINDOW: Auto-detected Fruit Ninja (Google Play Games on PC)     ║
 ╚══════════════════════════════════════════════════════════════════╝
 """
 
@@ -37,8 +37,63 @@ _SetCursorPos  = _user32.SetCursorPos
 _SetForeground = _user32.SetForegroundWindow
 
 
-def focus_bluestacks(hwnd: int):
-    """Must be called from main thread to take effect."""
+# Known window titles used by Fruit Ninja on Google Play Games / direct install
+_FRUIT_NINJA_TITLES = [
+    "Fruit Ninja®",
+    "Fruit Ninja",
+    "Fruit Ninja Classic",
+    "Fruit Ninja Classic®",
+    "FruitNinja",
+]
+
+def _find_fruit_ninja_window():
+    """
+    Enumerate all visible top-level windows and return the HWND of the one
+    whose title contains 'Fruit Ninja' or 'FruitNinja' (case-insensitive).
+    Handles Google Play Games username-suffixed titles like 'Fruit Ninja® - iamrut20'.
+    """
+    found = [0]
+    EnumWindowsProc = ctypes.WINFUNCTYPE(
+        ctypes.c_bool,
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int)
+    )
+    def _cb(hwnd, lp):
+        if not _user32.IsWindowVisible(hwnd):
+            return True
+        buf = ctypes.create_unicode_buffer(256)
+        _user32.GetWindowTextW(hwnd, buf, 256)
+        title = buf.value.strip().lower()
+        if "fruit ninja" in title or "fruitninja" in title:
+            found[0] = hwnd
+            return False
+        return True
+    _user32.EnumWindows(EnumWindowsProc(_cb), 0)
+    return found[0]
+
+
+def find_game_window():
+    """
+    Locate the Fruit Ninja window and return its HWND, or raise RuntimeError.
+    Uses fast-path exact title matching, then slow-path enumeration.
+    """
+    hwnd = 0
+    for title in _FRUIT_NINJA_TITLES:
+        hwnd = _user32.FindWindowW(None, title)
+        if hwnd:
+            logging.info(f"[Win32] Fruit Ninja window found via exact title: '{title}'")
+            break
+    if not hwnd:
+        hwnd = _find_fruit_ninja_window()
+        if hwnd:
+            buf = ctypes.create_unicode_buffer(256)
+            _user32.GetWindowTextW(hwnd, buf, 256)
+            logging.info(f"[Win32] Fruit Ninja window found via enumeration: '{buf.value.strip()}'")
+    return hwnd
+
+
+def focus_game_window(hwnd: int):
+    """Bring the game window to foreground. Must be called from main thread."""
     _SetForeground(hwnd)
     time.sleep(0.05)
 
@@ -406,10 +461,13 @@ class FruitNinjaBot:
                             format="[%(asctime)s]  %(message)s",
                             datefmt="%H:%M:%S")
 
-        self.hwnd = _user32.FindWindowW(None, "BlueStacks App Player")
+        self.hwnd = find_game_window()
         if not self.hwnd:
-            raise RuntimeError("BlueStacks App Player not found. Is it running?")
-        logging.info(f"[Win32] BlueStacks hwnd: {self.hwnd}")
+            raise RuntimeError(
+                "Fruit Ninja window not found. "
+                "Please launch Fruit Ninja via Google Play Games first."
+            )
+        logging.info(f"[Win32] Fruit Ninja hwnd: {self.hwnd}")
 
         model_path    = ensure_onnx(cfg)
         self.capture  = DXCamCapture(cfg.CAPTURE_REGION, target_fps=120)
@@ -427,7 +485,7 @@ class FruitNinjaBot:
         time.sleep(3)
 
         # Focus called from main thread — required for mouse_event to work
-        focus_bluestacks(self.hwnd)
+        focus_game_window(self.hwnd)
 
         try:
             while True:
@@ -492,7 +550,7 @@ if __name__ == "__main__":
     CFG.FRUIT_CLASSES = ["fruit"]
     CFG.BOMB_CLASS = "bomb"
 
-    # 3. Window coords confirmed — do not change unless BlueStacks moves
+    # 3. Window coords auto-detected — dynamic each run
     #    Client size: 664x407  |  Origin: (68, 23)
 
     # 4. Tune these if needed
