@@ -2,7 +2,7 @@
 
 ## 🎥 Demo Video
 
-<video src="https://github.com/rutikbhadane/fruit-ninja-aimbot/raw/main/20260425_16_36_02_209.mp4" controls="controls" width="100%"></video>
+[🎥 Watch the Demo Video on GitHub](https://github.com/rutikbhadane/fruit-ninja-aimbot/blob/main/20260425_16_36_02_209.mp4)
 
 An AI-powered computer vision agent capable of playing Fruit Ninja with inhuman precision. Utilizing a highly optimized YOLOv8 object detection model combined with OpenVINO runtime for low-latency execution, and a physics-based predictive targeting system, this bot observes the screen, calculates trajectories, and executes precise mouse-drag slices to cut fast-moving fruits while avoiding bombs.
 
